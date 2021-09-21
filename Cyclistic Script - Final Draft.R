@@ -1,4 +1,3 @@
-setwd("/Users/mikre-ababera/Desktop/R Projects/Bikes")
 install.packages("plyr")
 library(plyr)
 library(lubridate)

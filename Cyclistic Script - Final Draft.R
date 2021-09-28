@@ -1,4 +1,4 @@
-
+install.packages("geosphere")
 install.packages("plyr")
 library(plyr)
 library(lubridate)
@@ -41,12 +41,12 @@ bike_data$duration_in_minutes <- round(bike_data$duration/60)
 
 #removing the word secs from the conversion I made into minutes but the word mins isn't replacing it.
 bike_data$duration_in_minutes <- gsub('secs', 'mins', bike_data$duration_in_minutes)
-bike_data$duration_in_minutes <- round(bike_data$duration_in_minutes, digits = 0)
+bike_data$duration_in_minutes <- round(bike_data$duration_in_minutes)
 
 #grabbing the distance
 bike_data$distance <- distHaversine(cbind(bike_data$start_lng, bike_data$start_lat), cbind(lag(bike_data$end_lng), lag(bike_data$end_lat)))
-#conversion to miles
-bike_data$distance_miles <- round(bike_data$distance * 0.000621, digits = 2)
+#conversion to miles and rounding
+bike_data$distance_miles <- round(bike_data$distance * 0.000621, digits = 0)
 
 #separating the columns of date and time to make them easier to work with
 bike_data <- separate(bike_data, started_at, c("start_date", "start_time"), sep = " ")
@@ -61,11 +61,6 @@ bike_data <- separate(bike_data, start_time, c("start_date", "start_time"), sep 
 #converting to 12hr
 bike_data$start_time <- format(strptime(bike_data$start_time, '%H:%M:%S'), '%I:%M %p')
 
-#rounding distance
-bike_data$distance_miles <- round(bike_data$distance_miles, digits = 0)
-
-colnames(bike_data)
-
 #selecting only the columns that need to be analyzed
 Cyclistic_Data <- sqldf("SELECT ride_id, rideable_type, start_time, start_station_name, start_station_id, end_station_name, end_station_id, member_casual, duration_in_minutes, distance_miles, day, month FROM bike_data")
 
@@ -78,38 +73,45 @@ Cyclistic_Data$distance_miles <- round(Cyclistic_Data$distance_miles)
 #basic information
 sqldf("SELECT AVG(distance_miles), AVG(duration_in_minutes) 
       FROM Cyclistic_Data 
-      WHERE member_casual != 'casual'")
+      WHERE member_casual = 'member'")
 
 sqldf("SELECT AVG(distance_miles), AVG(duration_in_minutes) 
       FROM Cyclistic_Data 
       WHERE member_casual = 'casual'")
 
 
-stationforcasual <- sqldf("SELECT COUNT(start_station_name) AS Starting_Rides, start_station_name, 
+sqldf("SELECT COUNT(start_station_name) AS Member_Ending_Stations, start_station_name, 
       end_station_name 
       FROM Cyclistic_Data 
-      WHERE NOT member_casual = ''
+      WHERE member_casual = 'member'
       Group By start_station_name 
-      Order By Starting_Rides DESC
-      LIMIT 15")
+      Order By Member_Ending_Stations DESC
+      LIMIT 5")
 
 
-sqldf("SELECT COUNT(start_station_name) AS Starting_Rides, start_station_name, 
+sqldf("SELECT COUNT(start_station_name) AS Casual_Ending_Stations, start_station_name, 
       end_station_name 
       FROM Cyclistic_Data 
-      WHERE member_casual = 'casual' AND
+      WHERE member_casual = 'casual'
       Group By start_station_name 
-      Order By Starting_Rides DESC
-      LIMIT 15")
+      Order By Casual_Ending_Stations DESC
+      LIMIT 5")
 
-sqldf("SELECT COUNT(start_station_name) AS Starting_Rides, start_station_name, 
+sqldf("SELECT COUNT(end_station_name) AS Member_Starting_Rides, start_station_name, 
       end_station_name 
       FROM Cyclistic_Data 
-      WHERE member_casual != 'casual' 
-      Group By start_station_name 
-      Order By Starting_Rides DESC
-      LIMIT 10")
+      WHERE member_casual = 'member' 
+      Group By end_station_name
+      Order By Member_Starting_Rides DESC
+      LIMIT 5")
 
+sqldf("SELECT COUNT(end_station_name) AS Casual_Starting_Rides, start_station_name, 
+      end_station_name 
+      FROM Cyclistic_Data 
+      WHERE member_casual = 'casual' 
+      Group By end_station_name
+      Order By Casual_Starting_Rides DESC
+      LIMIT 5")
 
 
 write.csv(Cyclistic_Data,"~/Desktop/R Projects/CyclisticData.csv", row.names = FALSE)
@@ -118,12 +120,12 @@ write.csv(Cyclistic_Data,"~/Desktop/R Projects/CyclisticData.csv", row.names = F
 
 d <- ggplot(data = Cyclistic_Data)
 t <- theme(plot.title = element_text(hjust = 0.5, size = 18, face = 'bold'),
-     axis.text.x = element_text(face = 'bold', color = 'black', size = 12), 
-     axis.text.y = element_text(face = "bold", color = 'black', size = 12),
-     axis.title.x = element_text(size = 16, face = 'bold'),
-     axis.title.y = element_text(size = 16, face = 'bold'),
-     legend.title = element_text(size = 16, face = 'bold'),
-     legend.text = element_text(size = 16, face = 'bold')) 
+           axis.text.x = element_text(face = 'bold', color = 'black', size = 12), 
+           axis.text.y = element_text(face = "bold", color = 'black', size = 12),
+           axis.title.x = element_text(size = 16, face = 'bold'),
+           axis.title.y = element_text(size = 16, face = 'bold'),
+           legend.title = element_text(size = 16, face = 'bold'),
+           legend.text = element_text(size = 16, face = 'bold')) 
 
 
 
@@ -134,17 +136,17 @@ d + geom_bar(mapping = aes(x = rideable_type, fill = member_casual),
   labs(x = "Type of Bike", y = "Number of Rides", fill = "Type of Rider") +
   ggtitle("Preferred Type of Bike") + t + 
   scale_x_discrete(labels=c("classic_bike" = "Classic Bike", "docked_bike" = "Docked Bike",
-  "electric_bike" = "Electric Bike")) + 
+   "electric_bike" = "Electric Bike")) + 
   scale_y_continuous(label = comma, breaks = seq(0, 1200000, 300000), limits = c(0,1500000))
-  
-  
+
+
 #graph to show monthly rider
 d + geom_bar(mapping = aes(x = month, fill = member_casual),
   stat = "count", position = position_dodge()) + t +
   scale_fill_discrete(labels = c("Casual", "Member")) +
   labs(x = "Month", y = "Number of Rides", fill = "Type of Rider") + 
   ggtitle("Monthly Count of Riders") + theme(plot.title = element_text(hjust = 0.5), 
-  axis.text.x = element_text(face = 'bold', angle = 45)) + 
+                                             axis.text.x = element_text(face = 'bold', angle = 45)) + 
   scale_x_discrete(limits = month.name) +
   scale_y_continuous(label = comma, breaks = seq(0, 250000, 50000), limits = c(0,275000))
 
@@ -166,19 +168,19 @@ ggplot(data = Cyclistic_Data) + geom_histogram(mapping = aes(x = formatted_day, 
 
 #creating 24hr time block to better order the time
 Cyclistic_Data$formatted_24hr <- format(strptime(Cyclistic_Data$start_time, "%I:%M %p"), format="%H:%M:%S")
-Cyclistic_Data$formatted_24hr <- gsub(":00",":00",as.character(Cyclistic_Data$formatted_24hr))
+Cyclistic_Data$formatted_24hr <- gsub(":00"," ", as.character(Cyclistic_Data$formatted_24hr))
 
 ggplot(data = Cyclistic_Data) + geom_bar(mapping = aes(x = formatted_24hr, fill = member_casual), 
   stat = "count", position = position_dodge()) + t +
   scale_fill_discrete(labels = c("Casual", "Member")) +
   labs(x = "Time of Day (24hr)", y = "Number of Rides", fill = "Type of Rider") + 
   ggtitle("Hourly Count of Riders") + theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(axis.text.x=element_text(angle=45,hjust=1, face = 'bold'))
+  theme(axis.text.x=element_text(angle=45,hjust=1, face = 'bold')) + 
+  scale_y_continuous(label = comma, breaks = seq(0, 150000, 50000), limits = c(0,200000))
 
 ggplot(data = Cyclistic_Data) + geom_line(mapping = aes(x = distance_miles , color = member_casual), 
   stat = "count", position = position_dodge()) + t +
   labs(x = "Distance Traveled (miles)", y = "# of Rides", fill = "User") +
   ggtitle("Distance Traveled by Users") + theme(plot.title = element_text(hjust = 0.5)) + 
   theme(axis.text.x=element_text(angle=45,hjust=1))
-
 
